@@ -1,0 +1,69 @@
+require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game).caption("script executed", "i just copied these entities and piled them up", "credits go to eoyoustme for his homemade entities and Anctarus7105. have fun!" true)
+
+-- Depth
+coroutine.wrap(function()
+    while true do
+        wait(math.random 75,100)
+        game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+         wait(1.6)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/eoyoustme/Script/refs/heads/main/Detph1"))()
+end
+end)()
+
+-- A-60
+coroutine.wrap(function()
+    while true do
+        wait(math.random(100, 100))
+        game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+        wait(0)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Anctarus7105/Entities-Spawns/refs/heads/main/A-60HarderMode"))()
+end
+end)()
+
+-- Him
+coroutine.wrap(function()
+    while true do
+        wait(math.random(100, 100))
+        game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+        wait(0)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/no12356/doorz/refs/heads/main/folder/him-spawner%20(probably%20doesnt%20work)")())
+end
+end()
+
+-- Smiler
+coroutine.wrap(function()
+    while true do
+        wait(380)
+        game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+        wait(0)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/eoyoustme/Script/refs/heads/main/Smiler"))()
+end
+end()
+
+-- CommonSense
+coroutine.wrap(function()
+    while true do
+        wait(380)
+        game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+        wait(0)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/eoyoustme/Script/refs/heads/main/Common_Sense.txt"))()
+end
+end()
+
+-- Hunger
+  while true do
+        wait(math.random(100, 100))
+        game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+        wait(0)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/eoyoustme/Script/refs/heads/main/Hunger.txt"))()
+end
+end()
+
+-- Wh1t3
+  while true do
+        wait(math.random(100, 100))
+        game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+        wait(0)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/eoyoustme/Script/refs/heads/main/wh1t3.txt"))()
+end
+end()
