@@ -1,11 +1,13 @@
--- ALL CREDITS GO TO VYNIXU FOR THIS.
--- NOTHING BUT THE CRUCIFIX EFFECT HERE WAS MADE BY ME
+-- ALL CREDITS GO TO VYNIXU FOR THIS. NOTHING BUT THE CRUCIFIX EFFECT HERE WAS MADE BY ME
+-- Services
 
 local Players = game:GetService("Players")
 local RS = game:GetService("RunService")
 local ReSt = game:GetService("ReplicatedStorage")
 local CG = game:GetService("CoreGui")
 local TS = game:GetService("TweenService")
+
+-- Variables
 
 local Plr = Players.LocalPlayer
 local Char = Plr.Character or Plr.CharacterAdded:Wait()
@@ -15,22 +17,17 @@ local Camera = workspace.CurrentCamera
 
 local FindPartOnRayWithIgnoreList = workspace.FindPartOnRayWithIgnoreList
 local WorldToViewportPoint = Camera.WorldToViewportPoint
-
 local StaticRushSpeed = 50
 local MinTeaseSize = 150
 local MaxTeaseSize = 300
 
 local SelfModules = {
-    Functions = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"
-    ))(),
+    Functions = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))(),
 }
-
 local ModuleScripts = {
     MainGame = require(Plr.PlayerGui.MainUI.Initiator.Main_Game),
     ModuleEvents = require(ReSt.ClientModules.Module_Events),
 }
-
 local DefaultConfig = {
     Speed = 100,
     DelayTime = 2,
@@ -39,231 +36,93 @@ local DefaultConfig = {
     KillRange = 50,
     BreakLights = true,
     BackwardsMovement = false,
-
     FlickerLights = {
         true,
         1,
     },
-
     Cycles = {
         Min = 1,
         Max = 1,
         WaitTime = 2,
     },
-
     CamShake = {
         true,
         {5, 15, 0.1, 1},
         100,
     },
-
     Jumpscare = {
         false,
         {},
     },
-
     CustomDialog = {},
 }
-
 local Connections = {}
 local StoredSounds = {}
 
 local Creator = {}
 
---------------------------------------------------
--- MISC
---------------------------------------------------
+-- Misc Functions
 
 local function drag(model, dest, speed)
-
-    if not Connections[model] then
-        return
-    end
-
     if Connections[model].Drag then
         Connections[model].Drag:Disconnect()
     end
 
     local reached = false
-
+    
     Connections[model].Drag = RS.Stepped:Connect(function(_, step)
-
-        if model.Parent and model.PrimaryPart then
-
+        if model.Parent then
             local rootPos = model.PrimaryPart.Position
-
-            local diff =
-                Vector3.new(dest.X, dest.Y, dest.Z)
-                - rootPos
-
+            local diff = Vector3.new(dest.X, dest.Y, dest.Z) - rootPos
+    
             if diff.Magnitude > 0.1 then
-
-                model:SetPrimaryPartCFrame(
-                    CFrame.new(
-                        rootPos
-                        + diff.Unit
-                        * math.min(
-                            step * speed,
-                            diff.Magnitude
-                        )
-                    )
-                )
-
+                model:SetPrimaryPartCFrame(CFrame.new(rootPos + diff.Unit * math.min(step * speed, diff.Magnitude)))
             else
-
                 Connections[model].Drag:Disconnect()
+    
                 reached = true
-
             end
-
-        elseif Connections[model].Drag then
-
+        else
             Connections[model].Drag:Disconnect()
-
         end
     end)
 
-    repeat
-        task.wait()
-    until reached or not model.Parent
+    repeat task.wait() until reached
 end
 
---------------------------------------------------
--- SOUND
---------------------------------------------------
-
 local function playSound(soundId, properties)
-
     for i, v in next, StoredSounds do
-
-        if v then
-            pcall(function()
-                v:Stop()
-                v:Destroy()
-            end)
-        end
-
+        v:Destroy()
         StoredSounds[i] = nil
     end
 
     local sound = Instance.new("Sound")
-
-    sound.Name = "CustomEntitySound"
-
-    if typeof(soundId) == "number" then
-
-        sound.SoundId =
-            "rbxassetid://"
-            .. tostring(soundId)
-
-    elseif typeof(soundId) == "string" then
-
-        if string.find(
-            soundId,
-            "rbxassetid://"
-        ) then
-
-            sound.SoundId = soundId
-
-        else
-
-            local digits =
-                string.match(
-                    soundId,
-                    "%d+"
-                )
-
-            if digits then
-                sound.SoundId =
-                    "rbxassetid://"
-                    .. digits
-            end
-        end
-    end
-
-    if typeof(properties) == "table" then
-
-        for i, v in next, properties do
-
-            if i ~= "SoundId"
-                and i ~= "Playing"
-                and i ~= "Parent" then
-
-                pcall(function()
-                    sound[i] = v
-                end)
-
-            end
-        end
-    end
-
+    sound.SoundId = "rbxassetid://".. ({string.gsub(soundId, "%D", "")})[1]
+    sound.Playing = true
     sound.Parent = workspace
 
-    if not sound.IsLoaded then
-
-        pcall(function()
-            sound.Loaded:Wait()
-        end)
-
+    for i, v in next, properties do
+        if i ~= "SoundId" and i ~= "Playing" and i ~= "Parent" then
+            sound[i] = v
+        end
     end
 
-    sound:Play()
-
-    StoredSounds[#StoredSounds + 1] =
-        sound
+    StoredSounds[#StoredSounds + 1] = sound
 
     return sound
 end
 
---------------------------------------------------
--- DESTROY
---------------------------------------------------
-
 local function destroy(entityTable)
-
-    if not entityTable then
-        return
+    for _, v in next, Connections[entityTable.Model] do
+        v:Disconnect()
     end
 
-    local model = entityTable.Model
-
-    if Connections[model] then
-
-        for _, v in next,
-            Connections[model] do
-
-            if v then
-
-                pcall(function()
-                    v:Disconnect()
-                end)
-
-            end
-        end
-
-        Connections[model] = nil
-    end
-
-    if model and model.Parent then
-        model:Destroy()
-    end
-
-    if entityTable.Debug
-        and entityTable.Debug.OnEntityDespawned then
-
-        entityTable.Debug.OnEntityDespawned(
-            entityTable
-        )
-
-    end
+    Connections[entityTable.Model] = nil
+    entityTable.Model:Destroy()
+    entityTable.Debug.OnEntityDespawned(entityTable)
 end
 
---------------------------------------------------
--- DEFLECTION
---------------------------------------------------
-
 local function shouldDeflect()
-
     if workspace:FindFirstChild("Doggo") then
         return true
     elseif Char:FindFirstChild("Crucifix") then
@@ -273,80 +132,53 @@ local function shouldDeflect()
     return false
 end
 
---------------------------------------------------
--- CREATE ENTITY
---------------------------------------------------
+-- Functions
 
 Creator.createEntity = function(config)
+    -- Prepare configs
 
     assert(typeof(config) == "table")
     assert(config.Model)
 
     for i, v in next, DefaultConfig do
-
         if config[i] == nil then
-            config[i] = v
+            config[i] = DefaultConfig[i]
         end
-
     end
+    
+    config.Speed = StaticRushSpeed / 100 * config.Speed
 
-    config.Speed =
-        StaticRushSpeed
-        / 100
-        * config.Speed
+    -- Obtain custom model
 
-    --------------------------------------------------
-    -- LOAD MODEL
-    --------------------------------------------------
+    local entityModel = LoadCustomInstance(config.Model)
 
-    local entityModel =
-        LoadCustomInstance(
-            config.Model
-        )
-
-    if typeof(entityModel) == "Instance"
-        and entityModel:IsA("Model") then
-
-        local pPart =
-            entityModel.PrimaryPart
-            or entityModel:FindFirstChildWhichIsA(
-                "BasePart"
-            )
+    if typeof(entityModel) == "Instance" and entityModel.ClassName == "Model" then
+        local pPart = entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart")
 
         if pPart then
-
-            entityModel.PrimaryPart =
-                pPart
-
+            entityModel.PrimaryPart = pPart
             pPart.Anchored = true
-
-            entityModel:SetAttribute(
-                "IsCustomEntity",
-                true
-            )
+            entityModel:SetAttribute("IsCustomEntity", true)
 
             if config.CustomName then
-
-                entityModel.Name =
-                    config.CustomName
-
+                entityModel.Name = config.CustomName
             end
 
-            for _, v in next,
-                entityModel:GetDescendants() do
-
+            for _, v in next, entityModel:GetDescendants() do
                 if v:IsA("BasePart") then
                     v.CanCollide = false
                 end
-
             end
+
+            -- Setup Connections
 
             Connections[entityModel] = {}
 
+            -- Return
+            
             return {
                 Model = entityModel,
                 Config = config,
-
                 Debug = {
                     OnEntitySpawned = function() end,
                     OnEntityDespawned = function() end,
@@ -357,1474 +189,325 @@ Creator.createEntity = function(config)
                     OnDeath = function() end,
                 },
             }
-
         else
-
-            warn(
-                "Failure - Could not find model's PrimaryPart"
-            )
-
+            warn("Failure - Could not find model's PrimaryPart")
         end
-
     else
-
-        warn(
-            "Failure - Could not obtain model"
-        )
-
+        warn("Failure - Could not obtain model")
     end
 end
 
---------------------------------------------------
--- RUN ENTITY
---------------------------------------------------
-
 Creator.runEntity = function(entity)
-
-    if not entity or not entity.Model then
-        warn("Invalid entity")
-        return
-    end
-
-    --------------------------------------------------
-    -- GET LATEST ROOM
-    --------------------------------------------------
-
-    local latestRoom = 0
-
-    pcall(function()
-
-        latestRoom =
-            tonumber(
-                ReSt.GameData.LatestRoom.Value
-            ) or 0
-
-    end)
-
-    --------------------------------------------------
-    -- GET LOADED ROOMS
-    --------------------------------------------------
-
-    local function getLoadedRooms()
-
-        local loadedRooms = {}
-
-        local currentRooms =
-            workspace:FindFirstChild("CurrentRooms")
-
-        if not currentRooms then
-            return loadedRooms
-        end
-
-        for _, room in next,
-            currentRooms:GetChildren() do
-
-            local roomNumber =
-                tonumber(room.Name)
-
-            if roomNumber then
-
-                loadedRooms[#loadedRooms + 1] = {
-                    Room = room,
-                    Number = roomNumber,
-                }
-
-            end
-        end
-
-        table.sort(
-            loadedRooms,
-            function(a, b)
-                return a.Number < b.Number
-            end
-        )
-
-        return loadedRooms
-    end
-
-    --------------------------------------------------
-    -- GET SORTED ROOM NODES
-    --------------------------------------------------
-
-    local function getRoomNodes(room)
-
-        if not room
-            or not room.Parent then
-
-            return {}
-        end
-
-        local nodeFolder =
-            room:FindFirstChild("Nodes")
-
-        if not nodeFolder then
-            return {}
-        end
-
-        local roomNodes = {}
-
-        for _, node in next,
-            nodeFolder:GetChildren() do
-
-            if node:IsA("BasePart") then
-                roomNodes[#roomNodes + 1] = node
-            end
-        end
-
-        table.sort(
-            roomNodes,
-            function(a, b)
-
-                local aNumber =
-                    tonumber(a.Name)
-
-                local bNumber =
-                    tonumber(b.Name)
-
-                if aNumber and bNumber then
-                    return aNumber < bNumber
-                end
-
-                if aNumber then
-                    return true
-                end
-
-                if bNumber then
-                    return false
-                end
-
-                return a.Name < b.Name
-            end
-        )
-
-        return roomNodes
-    end
-
-    --------------------------------------------------
-    -- INITIAL ROOMS
-    --------------------------------------------------
-
-    local rooms =
-        getLoadedRooms()
-
-    if #rooms == 0 then
-
-        warn(
-            "No rooms currently loaded"
-        )
-
-        return
-    end
-
-    --------------------------------------------------
-    -- CHOOSE 3-4 ROOMS BEHIND PLAYER
-    --------------------------------------------------
-
-    local spawnBehind =
-        math.random(3, 4)
-
-    local targetRoom =
-        latestRoom - spawnBehind
-
-    local spawnRoomNumber
-
-    for _, data in next, rooms do
-
-        if data.Number == targetRoom then
-
-            spawnRoomNumber =
-                data.Number
-
-            break
-        end
-    end
-
-    --------------------------------------------------
-    -- FALLBACK
-    --------------------------------------------------
-
-    if not spawnRoomNumber then
-
-        for _, data in next, rooms do
-
-            if data.Number < latestRoom then
-
-                spawnRoomNumber =
-                    data.Number
-
-                break
-            end
-        end
-    end
-
-    --------------------------------------------------
-    -- ABSOLUTE FALLBACK
-    --------------------------------------------------
-
-    if not spawnRoomNumber then
-
-        spawnRoomNumber =
-            rooms[1].Number
-
-    end
-
-    --------------------------------------------------
-    -- DYNAMIC NODE QUEUE
-    --
-    -- IMPORTANT:
-    --
-    -- The old version only scanned a room once.
-    -- If the room existed before its Nodes loaded,
-    -- that room was permanently skipped.
-    --
-    -- This version repeatedly scans every loaded
-    -- room and adds any new nodes it finds.
-    --------------------------------------------------
+    -- Obtain nodes
 
     local nodes = {}
 
-    local knownNodes = {}
+    for _, room in next, workspace.CurrentRooms:GetChildren() do
+        if room:FindFirstChild("Nodes") then
+            local roomNodes = room.Nodes:GetChildren()
 
-    local consumedNodes = {}
+            table.sort(roomNodes, function(a, b)
+                return a.Name < b.Name
+            end)
 
-    --------------------------------------------------
-    -- UPDATE NODE QUEUE
-    --------------------------------------------------
-
-    local function updateNodeQueue()
-
-        local currentRooms =
-            getLoadedRooms()
-
-        for _, data in next,
-            currentRooms do
-
-            if data.Number >= spawnRoomNumber then
-
-                local roomNodes =
-                    getRoomNodes(
-                        data.Room
-                    )
-
-                for _, node in next,
-                    roomNodes do
-
-                    if node
-                        and node.Parent
-                        and node:IsDescendantOf(
-                            workspace.CurrentRooms
-                        )
-                        and not knownNodes[node] then
-
-                        knownNodes[node] = true
-
-                        nodes[#nodes + 1] = {
-                            Node = node,
-                            RoomNumber = data.Number,
-                            NodeNumber =
-                                tonumber(node.Name)
-                                or 999999,
-                        }
-
-                    end
-                end
+            for _, node in next, roomNodes do
+                nodes[#nodes + 1] = node
             end
         end
-
-        --------------------------------------------------
-        -- ALWAYS SORT BY ROOM + NODE
-        --------------------------------------------------
-
-        table.sort(
-            nodes,
-            function(a, b)
-
-                if a.RoomNumber
-                    ~= b.RoomNumber then
-
-                    return a.RoomNumber
-                        < b.RoomNumber
-
-                end
-
-                return a.NodeNumber
-                    < b.NodeNumber
-            end
-        )
     end
 
-    --------------------------------------------------
-    -- INITIAL LOAD
-    --------------------------------------------------
+    -- Pre-cycle setup
 
-    updateNodeQueue()
-
-    --------------------------------------------------
-    -- WAIT FOR NODES IF THEY ARE STILL LOADING
-    --------------------------------------------------
-
-    local nodeWaitStart =
-        os.clock()
-
-    while #nodes == 0
-        and os.clock() - nodeWaitStart < 10 do
-
-        task.wait(0.1)
-
-        updateNodeQueue()
-    end
-
-    if #nodes == 0 then
-
-        warn(
-            "No nodes found"
-        )
-
-        return
-    end
-
-    --------------------------------------------------
-    -- PARENT ENTITY
-    --------------------------------------------------
-
-    entity.Model.Parent =
-        workspace
-
-    --------------------------------------------------
-    -- FLICKER
-    --------------------------------------------------
+    local firstRoom = workspace.CurrentRooms:GetChildren()[1]
+    entity.Model.Parent = workspace
 
     if entity.Config.FlickerLights[1] then
-
-        local latestRoomObject =
-            workspace.CurrentRooms[
-                tostring(latestRoom)
-            ]
-
-        if latestRoomObject then
-
-            task.spawn(
-                ModuleScripts.ModuleEvents.flickerLights,
-                latestRoomObject,
-                entity.Config.FlickerLights[2]
-            )
-
-        end
+        task.spawn(ModuleScripts.ModuleEvents.flickerLights, workspace.CurrentRooms[ReSt.GameData.LatestRoom.Value], entity.Config.FlickerLights[2])
     end
 
-    entity.Debug.OnEntitySpawned(
-        entity
-    )
+    entity.Debug.OnEntitySpawned(entity)
+    task.wait(entity.Config.DelayTime or 0)
 
-    task.wait(
-        entity.Config.DelayTime or 0
-    )
-
-    --------------------------------------------------
-    -- UPDATE AFTER DELAY
-    --------------------------------------------------
-
-    updateNodeQueue()
-
-    --------------------------------------------------
-    -- MOVEMENT CONNECTION
-    --------------------------------------------------
+    -- Movement
 
     local enteredRooms = {}
 
-    Connections[entity.Model].Movement =
-        RS.Stepped:Connect(
-            function()
+    Connections[entity.Model].Movement = RS.Stepped:Connect(function()
+        if entity.Model.Parent and Hum.Health > 0 then
+            local entityPos = entity.Model.PrimaryPart.Position
+            local rootPos = Root.Position
+            local found = FindPartOnRayWithIgnoreList(workspace, Ray.new(entityPos, rootPos - entityPos), {entity.Model, Char})
+    
+            local groundRay = Ray.new(entityPos, Vector3.new(0, -4.5 - entity.Config.HeightOffset))
+            local groundFound = FindPartOnRayWithIgnoreList(workspace, groundRay, {entity.Model, Char})
 
-                if not entity.Model.Parent
-                    or not entity.Model.PrimaryPart then
+            if groundFound and (groundFound.Name == "Floor" or string.find(groundFound.Name, "Carpet")) then
+                for _, room in next, workspace.CurrentRooms:GetChildren() do
+                    if groundFound.IsDescendantOf(groundFound, room) and not table.find(enteredRooms, room) then
+                        enteredRooms[#enteredRooms + 1] = room
 
-                    return
-                end
-
-                if Hum.Health <= 0 then
-                    return
-                end
-
-                local entityPos =
-                    entity.Model.PrimaryPart.Position
-
-                local rootPos =
-                    Root.Position
-
-                local found =
-                    FindPartOnRayWithIgnoreList(
-                        workspace,
-                        Ray.new(
-                            entityPos,
-                            rootPos - entityPos
-                        ),
-                        {
-                            entity.Model,
-                            Char
-                        }
-                    )
-
-                --------------------------------------------------
-                -- GROUND
-                --------------------------------------------------
-
-                local groundRay =
-                    Ray.new(
-                        entityPos,
-                        Vector3.new(
-                            0,
-                            -4.5
-                                - entity.Config.HeightOffset
-                        )
-                    )
-
-                local groundFound =
-                    FindPartOnRayWithIgnoreList(
-                        workspace,
-                        groundRay,
-                        {
-                            entity.Model,
-                            Char
-                        }
-                    )
-
-                if groundFound
-                    and (
-                        groundFound.Name == "Floor"
-                        or string.find(
-                            groundFound.Name,
-                            "Carpet"
-                        )
-                    ) then
-
-                    for _, room in next,
-                        workspace.CurrentRooms:GetChildren() do
-
-                        if groundFound:IsDescendantOf(room)
-                            and not table.find(
-                                enteredRooms,
-                                room
-                            ) then
-
-                            enteredRooms[
-                                #enteredRooms + 1
-                            ] = room
-
-                            entity.Debug.OnEntityEnteredRoom(
-                                entity,
-                                room
-                            )
-
-                        end
+                        entity.Debug.OnEntityEnteredRoom(entity, room)
                     end
                 end
+            end
 
-                --------------------------------------------------
-                -- NO WALL
-                --------------------------------------------------
+            if not found then
+                -- LookAt
 
-                if not found then
+                local _, onScreen = WorldToViewportPoint(Camera, entityPos)
 
-                    local _, onScreen =
-                        WorldToViewportPoint(
-                            Camera,
-                            entityPos
-                        )
+                if onScreen then
+                    entity.Debug.OnLookAtEntity(entity)
+                end
 
-                    if onScreen then
+                -- Within kill range
 
-                        entity.Debug.OnLookAtEntity(
-                            entity
-                        )
+                if (Root.Position - entity.Model.PrimaryPart.Position).Magnitude <= entity.Config.KillRange then
+                    -- Entity deflection
+                    
+                    local doggo = workspace:FindFirstChild("Doggo")
+                    local crucifix = Char:FindFirstChild("Crucifix")
+                    
+                    if doggo or crucifix then
+                        Connections[entity.Model].Movement:Disconnect()
+                        Connections[entity.Model].Drag:Disconnect()
+                        entity.Model:SetAttribute("StopMovement", true)
+			local effect = game:GetObjects("rbxassetid://11584227521")[1]
+	   effect.Parent = game.Workspace
+	   effect:PivotTo(entity.Model.RushNew.CFrame - Vector3.new(0,3,0))
+	   effect.Chain1.Attachment:FindFirstChildOfClass("Beam").Attachment1 = entity.Model.RushNew.Attachment
+	   effect.Chain2.Attachment:FindFirstChildOfClass("Beam").Attachment1 = entity.Model.RushNew.Attachment
+	   effect.Chain3.Attachment:FindFirstChildOfClass("Beam").Attachment1 = entity.Model.RushNew.Attachment
+	   effect.Chain4.Attachment:FindFirstChildOfClass("Beam").Attachment1 = entity.Model.RushNew.Attachment
+           wait(0.5)
+	   local ts = game:GetService("TweenService")
+           ts:Create(entity.Model.RushNew,TweenInfo.new(2, Enum.EasingStyle.Sine,Enum.EasingDirection.In),{CFrame = entity.Model.RushNew.CFrame + Vector3.new(0,20,0)}):Play()
+           wait(2)
+	   effect:Destroy()
+	   entity.Model:Destroy()
+                        if doggo then
+                            doggo.Growl:Play()
+                            
+                            -- Repent
 
-                    end
+                            local nodeIdx, nearest = nil, math.huge
 
-                    --------------------------------------------------
-                    -- KILL RANGE
-                    --------------------------------------------------
+                            for i, v in next, nodes do
+                                local dist = (v.Position - entityPos).Magnitude
 
-                    if (
-                        Root.Position
-                        - entity.Model.PrimaryPart.Position
-                    ).Magnitude
-                        <= entity.Config.KillRange then
-
-                        local doggo =
-                            workspace:FindFirstChild(
-                                "Doggo"
-                            )
-
-                        local crucifix =
-                            Char:FindFirstChild(
-                                "Crucifix"
-                            )
-
-                        --------------------------------------------------
-                        -- CRUCIFIX
-                        --------------------------------------------------
-
-                        if doggo or crucifix then
-
-                            if Connections[
-                                entity.Model
-                            ].Movement then
-
-                                Connections[
-                                    entity.Model
-                                ].Movement:Disconnect()
-
-                            end
-
-                            if Connections[
-                                entity.Model
-                            ].Drag then
-
-                                Connections[
-                                    entity.Model
-                                ].Drag:Disconnect()
-
-                            end
-
-                            entity.Model:SetAttribute(
-                                "StopMovement",
-                                true
-                            )
-
-                            local rushPart =
-                                entity.Model:FindFirstChild(
-                                    "RushNew",
-                                    true
-                                )
-
-                            local effect
-
-                            if rushPart then
-
-                                pcall(function()
-
-                                    effect =
-                                        game:GetObjects(
-                                            "rbxassetid://11584227521"
-                                        )[1]
-
-                                end)
-
-                                if effect then
-
-                                    effect.Parent =
-                                        workspace
-
-                                    pcall(function()
-
-                                        effect:PivotTo(
-                                            rushPart.CFrame
-                                            - Vector3.new(
-                                                0,
-                                                3,
-                                                0
-                                            )
-                                        )
-
-                                        for i = 1, 4 do
-
-                                            local chain =
-                                                effect:FindFirstChild(
-                                                    "Chain"
-                                                        .. i
-                                                )
-
-                                            local beam =
-                                                chain
-                                                and chain.Attachment
-                                                and chain.Attachment:
-                                                    FindFirstChildOfClass(
-                                                        "Beam"
-                                                    )
-
-                                            local attachment =
-                                                rushPart:FindFirstChild(
-                                                    "Attachment"
-                                                )
-
-                                            if beam
-                                                and attachment then
-
-                                                beam.Attachment1 =
-                                                    attachment
-
-                                            end
-                                        end
-
-                                    end)
-                                end
-
-                                task.wait(0.5)
-
-                                if entity.Model.Parent
-                                    and rushPart.Parent then
-
-                                    TS:Create(
-                                        rushPart,
-                                        TweenInfo.new(
-                                            2,
-                                            Enum.EasingStyle.Sine,
-                                            Enum.EasingDirection.In
-                                        ),
-                                        {
-                                            CFrame =
-                                                rushPart.CFrame
-                                                + Vector3.new(
-                                                    0,
-                                                    20,
-                                                    0
-                                                )
-                                        }
-                                    ):Play()
-
-                                    task.wait(2)
-
-                                end
-
-                                if effect then
-                                    effect:Destroy()
+                                if dist < nearest then
+                                    nodeIdx, nearest = i, dist
                                 end
                             end
 
-                            local hadDoggo =
-                                doggo ~= nil
-
-                            if entity.Model.Parent then
-                                entity.Model:Destroy()
+                            for i = nodeIdx, 1, -1 do
+                                drag(entity.Model, nodes[i].Position + Vector3.new(0, 3.5 + entity.Config.HeightOffset, 0), entity.Config.Speed)
                             end
 
-                            Connections[
-                                entity.Model
-                            ] = nil
-
-                            if hadDoggo then
-
-                                local growl =
-                                    doggo:FindFirstChild(
-                                        "Growl"
-                                    )
-
-                                if growl then
-                                    growl:Play()
-                                end
-
-                            end
+                            destroy(entity)
 
                             return
                         end
+                    end
 
-                        --------------------------------------------------
-                        -- NORMAL KILL
-                        --------------------------------------------------
-
-                        if entity.Config.CanKill
-                            and not Char:GetAttribute(
-                                "Hiding"
-                            )
-                            and not shouldDeflect() then
-
-                            if Connections[
-                                entity.Model
-                            ].Movement then
-
-                                Connections[
-                                    entity.Model
-                                ].Movement:Disconnect()
-
-                            end
-
-                            --------------------------------------------------
-                            -- JUMPSCARE
-                            --------------------------------------------------
-
-                            if entity.Config.Jumpscare
-                                and entity.Config.Jumpscare[1] then
-
-                                Creator.runJumpscare(
-                                    entity.Config.Jumpscare[2]
-                                )
-
-                            end
-
-                            --------------------------------------------------
-                            -- DEATH
-                            --------------------------------------------------
-
-                            Hum.Health = 0
-
-                            entity.Debug.OnDeath(
-                                entity
-                            )
-
-                            if #entity.Config.CustomDialog > 0 then
-
-                                ReSt.GameStats[
-                                    "Player_" .. Plr.Name
-                                ].Total.DeathCause.Value =
-                                    entity.Model.Name
-
-                                debug.setupvalue(
-                                    getconnections(
-                                        ReSt.Bricks.DeathHint.OnClientEvent
-                                    )[1].Function,
-                                    1,
-                                    entity.Config.CustomDialog
-                                )
-
-                            end
+                    -- Killing
+        
+                    if entity.Config.CanKill and not Char.GetAttribute(Char, "Hiding") and not shouldDeflect() then
+                        Connections[entity.Model].Movement:Disconnect()
+        
+                        -- Jumpscare
+        
+                        if entity.Config.Jumpscare[1] then
+                            Creator.runJumpscare(entity.Config.Jumpscare[2])
+                        end
+        
+                        -- Death handling + custom dialog
+                        
+                        Hum.Health = 0
+                        entity.Debug.OnDeath(entity)
+        
+                        if #entity.Config.CustomDialog > 0 then
+                            ReSt.GameStats["Player_".. Plr.Name].Total.DeathCause.Value = entity.Model.Name
+        
+                            debug.setupvalue(getconnections(ReSt.Bricks.DeathHint.OnClientEvent)[1].Function, 1, entity.Config.CustomDialog)
                         end
                     end
                 end
-
-                --------------------------------------------------
-                -- CAMERA SHAKE
-                --------------------------------------------------
-
-                if Root
-                    and entity.Model.PrimaryPart then
-
-                    local camShake =
-                        entity.Config.CamShake
-
-                    local mag =
-                        (
-                            Root.Position
-                            - entity.Model.PrimaryPart.Position
-                        ).Magnitude
-
-                    if camShake[1]
-                        and mag <= camShake[3] then
-
-                        local shakeRep = {}
-
-                        for i, v in next,
-                            camShake[2] do
-
-                            shakeRep[i] = v
-
-                        end
-
-                        shakeRep[1] =
-                            camShake[2][1]
-                            / camShake[3]
-                            * (
-                                camShake[3]
-                                - mag
-                            )
-
-                        ModuleScripts.MainGame.camShaker:
-                            ShakeOnce(
-                                ModuleScripts.MainGame.camShaker,
-                                table.unpack(
-                                    shakeRep
-                                )
-                            )
-
-                        shakeRep = nil
-                    end
-                end
-            end
-        )
-
-    entity.Debug.OnEntityStartMoving(
-        entity
-    )
-
-    --------------------------------------------------
-    -- MOVEMENT SETTINGS
-    --------------------------------------------------
-
-    local cycles =
-        entity.Config.Cycles
-
-    local nodeHeightOffset =
-        3.5
-        + entity.Config.HeightOffset
-
-    --------------------------------------------------
-    -- FIND FIRST NODE
-    --------------------------------------------------
-
-    updateNodeQueue()
-
-    local firstNode
-
-    for _, data in next, nodes do
-
-        local node =
-            data.Node
-
-        if node
-            and node.Parent
-            and node:IsDescendantOf(
-                workspace.CurrentRooms
-            ) then
-
-            firstNode =
-                node
-
-            break
-        end
-    end
-
-    if not firstNode then
-
-        destroy(entity)
-
-        return
-    end
-
-    --------------------------------------------------
-    -- SPAWN ENTITY
-    --------------------------------------------------
-
-    entity.Model:SetPrimaryPartCFrame(
-        firstNode.CFrame
-        + Vector3.new(
-            0,
-            nodeHeightOffset,
-            0
-        )
-    )
-
-    --------------------------------------------------
-    -- CYCLES
-    --------------------------------------------------
-
-    local totalCycles =
-        math.random(
-            cycles.Min,
-            cycles.Max
-        )
-
-    for cycle = 1, totalCycles do
-
-        --------------------------------------------------
-        -- FORWARD MOVEMENT
-        --------------------------------------------------
-
-        if not entity.Config.BackwardsMovement then
-
-            while entity.Model.Parent
-                and not entity.Model:GetAttribute(
-                    "StopMovement"
-                ) do
-
-                --------------------------------------------------
-                -- FIND NEXT UNCONSUMED NODE
-                --------------------------------------------------
-
-                updateNodeQueue()
-
-                local nextNode
-                local nextData
-
-                for _, data in next, nodes do
-
-                    local node =
-                        data.Node
-
-                    if not consumedNodes[node]
-                        and node
-                        and node.Parent
-                        and node:IsDescendantOf(
-                            workspace.CurrentRooms
-                        ) then
-
-                        nextNode = node
-                        nextData = data
-
-                        break
-                    end
-                end
-
-                --------------------------------------------------
-                -- NO NODE YET
-                --
-                -- WAIT FOR HOTEL TO LOAD A NEW ROOM.
-                --------------------------------------------------
-
-                if not nextNode then
-
-                    task.wait(0.1)
-
-                    updateNodeQueue()
-
-                    continue
-                end
-
-                --------------------------------------------------
-                -- BREAK LIGHTS
-                --------------------------------------------------
-
-                if entity.Config.BreakLights then
-
-                    local room =
-                        nextNode.Parent
-                        and nextNode.Parent.Parent
-
-                    if room
-                        and room.Parent then
-
-                        pcall(function()
-
-                            ModuleScripts.ModuleEvents.breakLights(
-                                room
-                            )
-
-                        end)
-                    end
-                end
-
-                --------------------------------------------------
-                -- MOVE
-                --------------------------------------------------
-
-                drag(
-                    entity.Model,
-                    nextNode.Position
-                    + Vector3.new(
-                        0,
-                        nodeHeightOffset,
-                        0
-                    ),
-                    entity.Config.Speed
-                )
-
-                --------------------------------------------------
-                -- MARK NODE AS USED
-                --------------------------------------------------
-
-                consumedNodes[nextNode] = true
-
-                --------------------------------------------------
-                -- REFRESH ROOMS
-                --------------------------------------------------
-
-                updateNodeQueue()
-
-                --------------------------------------------------
-                -- SMALL WAIT
-                --
-                -- Gives CurrentRooms time to create the
-                -- next room while Depth is moving.
-                --------------------------------------------------
-
-                task.wait()
             end
 
+            -- Cam shake
+    
+            if Root and entity.Model.PrimaryPart then
+                local camShake = entity.Config.CamShake
+                local mag = (Root.Position - entity.Model.PrimaryPart.Position).Magnitude
+    
+                if camShake[1] and mag <= camShake[3] then
+                    local shakeRep = {}
+    
+                    for i, v in next, camShake[2] do
+                        shakeRep[i] = v
+                    end
+                    shakeRep[1] = camShake[2][1] / camShake[3] * (camShake[3] - mag)
+                    
+                    ModuleScripts.MainGame.camShaker.ShakeOnce(ModuleScripts.MainGame.camShaker, table.unpack(shakeRep))
+                    shakeRep = nil
+                end
+            end
         else
-
-            --------------------------------------------------
-            -- BACKWARDS MOVEMENT
-            --------------------------------------------------
-
-            updateNodeQueue()
-
-            local backwardsNodes = {}
-
-            for i = #nodes, 1, -1 do
-
-                local data =
-                    nodes[i]
-
-                local node =
-                    data.Node
-
-                if node
-                    and node.Parent
-                    and node:IsDescendantOf(
-                        workspace.CurrentRooms
-                    ) then
-
-                    backwardsNodes[
-                        #backwardsNodes + 1
-                    ] = node
-
-                end
-            end
-
-            for i = 1,
-                #backwardsNodes do
-
-                if entity.Model:GetAttribute(
-                    "StopMovement"
-                ) then
-
-                    break
-                end
-
-                local node =
-                    backwardsNodes[i]
-
-                if node
-                    and node.Parent then
-
-                    if entity.Config.BreakLights then
-
-                        local room =
-                            node.Parent
-                            and node.Parent.Parent
-
-                        if room
-                            and room.Parent then
-
-                            pcall(function()
-
-                                ModuleScripts.ModuleEvents.breakLights(
-                                    room
-                                )
-
-                            end)
-                        end
-                    end
-
-                    drag(
-                        entity.Model,
-                        node.Position
-                        + Vector3.new(
-                            0,
-                            nodeHeightOffset,
-                            0
-                        ),
-                        entity.Config.Speed
-                    )
-                end
-            end
+            Connections[entity.Model].Movement:Disconnect()
         end
-
-        --------------------------------------------------
-        -- REBOUND
-        --
-        -- Preserves your original Cycles behavior.
-        --------------------------------------------------
-
-        if cycles.Max > 1
-            and not entity.Model:GetAttribute(
-                "StopMovement"
-            ) then
-
-            updateNodeQueue()
-
-            --------------------------------------------------
-            -- REVERSE THROUGH CURRENT VALID NODES
-            --------------------------------------------------
-
-            for i = #nodes, 1, -1 do
-
-                if entity.Model:GetAttribute(
-                    "StopMovement"
-                ) then
-
-                    break
-                end
-
-                local data =
-                    nodes[i]
-
-                local node =
-                    data.Node
-
-                if node
-                    and node.Parent
-                    and node:IsDescendantOf(
-                        workspace.CurrentRooms
-                    ) then
-
-                    drag(
-                        entity.Model,
-                        node.Position
-                        + Vector3.new(
-                            0,
-                            nodeHeightOffset,
-                            0
-                        ),
-                        entity.Config.Speed
-                    )
-                end
-            end
-        end
-
-        --------------------------------------------------
-        -- REBOUND CALLBACK
-        --------------------------------------------------
-
-        entity.Debug.OnEntityFinishedRebound(
-            entity
-        )
-
-        task.wait(
-            cycles.WaitTime or 0
-        )
-
-        --------------------------------------------------
-        -- REFRESH BEFORE NEXT CYCLE
-        --------------------------------------------------
-
-        updateNodeQueue()
-    end
-
-    --------------------------------------------------
-    -- DESPAWN
-    --------------------------------------------------
-
-    if entity.Model.Parent then
-        destroy(entity)
-    end
-end
-
---------------------------------------------------
--- JUMPSCARE
---------------------------------------------------
-
-Creator.runJumpscare = function(config)
-
-    if not config then
-        return
-    end
-
-    --------------------------------------------------
-    -- LOAD IMAGES
-    --------------------------------------------------
-
-    local image1 =
-        LoadCustomAsset(
-            config.Image1
-        )
-
-    local image2 =
-        LoadCustomAsset(
-            config.Image2
-        )
-
-    local sound1
-    local sound2
-
-    --------------------------------------------------
-    -- MOVE PLAYER AWAY
-    --------------------------------------------------
-
-    pcall(function()
-
-        Char:SetPrimaryPartCFrame(
-            CFrame.new(
-                0,
-                9e9,
-                0
-            )
-        )
-
     end)
 
-    --------------------------------------------------
-    -- GUI
-    --------------------------------------------------
+    entity.Debug.OnEntityStartMoving(entity)
 
-    local JumpscareGui =
-        Instance.new("ScreenGui")
+    -- Go through cycles
 
-    local Background =
-        Instance.new("Frame")
+    if entity.Config.BackwardsMovement then
+        local inverseNodes = {}
 
-    local Face =
-        Instance.new("ImageLabel")
-
-    JumpscareGui.Name =
-        "JumpscareGui"
-
-    JumpscareGui.IgnoreGuiInset =
-        true
-
-    JumpscareGui.ZIndexBehavior =
-        Enum.ZIndexBehavior.Sibling
-
-    Background.Name =
-        "Background"
-
-    Background.BackgroundColor3 =
-        Color3.fromRGB(
-            0,
-            0,
-            0
-        )
-
-    Background.BorderSizePixel =
-        0
-
-    Background.Size =
-        UDim2.new(
-            1,
-            0,
-            1,
-            0
-        )
-
-    Background.ZIndex =
-        999
-
-    Face.Name =
-        "Face"
-
-    Face.AnchorPoint =
-        Vector2.new(
-            0.5,
-            0.5
-        )
-
-    Face.BackgroundTransparency =
-        1
-
-    Face.Position =
-        UDim2.new(
-            0.5,
-            0,
-            0.5,
-            0
-        )
-
-    Face.ResampleMode =
-        Enum.ResamplerMode.Pixelated
-
-    Face.Size =
-        UDim2.new(
-            0,
-            150,
-            0,
-            150
-        )
-
-    Face.Image =
-        image1
-
-    Face.Parent =
-        Background
-
-    Background.Parent =
-        JumpscareGui
-
-    JumpscareGui.Parent =
-        CG
-
-    --------------------------------------------------
-    -- TEASE
-    --------------------------------------------------
-
-    if config.Tease
-        and config.Tease[1] then
-
-        if typeof(config.Sound1)
-            == "table" then
-
-            sound1 =
-                playSound(
-                    config.Sound1[1],
-                    config.Sound1[2]
-                )
-
+        for i = #nodes, 1, -1 do
+            inverseNodes[#inverseNodes + 1] = nodes[i]
         end
 
-        local rdmTease =
-            math.random(
-                config.Tease.Min,
-                config.Tease.Max
-            )
-
-        for _ = config.Tease.Min,
-            rdmTease do
-
-            task.wait(
-                math.random(
-                    100,
-                    200
-                ) / 100
-            )
-
-            local growFactor =
-                (
-                    MaxTeaseSize
-                    - MinTeaseSize
-                )
-                / rdmTease
-
-            Face.Size =
-                UDim2.new(
-                    0,
-                    Face.AbsoluteSize.X
-                        + growFactor,
-                    0,
-                    Face.AbsoluteSize.Y
-                        + growFactor
-                )
-        end
-
-        task.wait(
-            math.random(
-                100,
-                200
-            ) / 100
-        )
+        nodes = inverseNodes
     end
 
-    --------------------------------------------------
-    -- FLASH
-    --------------------------------------------------
+    local cycles = entity.Config.Cycles
+    local nodeHeightOffset = 3.5 + entity.Config.HeightOffset
 
-    if config.Flashing
-        and config.Flashing[1] then
+    entity.Model:SetPrimaryPartCFrame(nodes[1].CFrame + Vector3.new(0, 3.5 + entity.Config.HeightOffset, 0))
 
+    for cycle = 1, math.random(cycles.Min, cycles.Max) do
+        for i = 1, #nodes, 1 do
+            if not entity.Model:GetAttribute("StopMovement") then
+                if entity.Config.BreakLights then
+                    ModuleScripts.ModuleEvents.breakLights(nodes[i].Parent.Parent)
+                end
+    
+                drag(entity.Model, nodes[i].Position + Vector3.new(0, nodeHeightOffset, 0), entity.Config.Speed)
+            end
+        end
+
+        if cycles.Max > 1 then
+            for i = #nodes, 1, -1 do
+                if not entity.Model:GetAttribute("StopMovement") then
+                    drag(entity.Model, nodes[i].Position + Vector3.new(0, nodeHeightOffset, 0), entity.Config.Speed)
+                end
+            end
+        end
+        
+        entity.Debug.OnEntityFinishedRebound(entity)
+
+        task.wait(cycles.WaitTime or 0)
+    end
+
+    -- Remove entity after cycles
+
+    destroy(entity)
+end
+
+Creator.runJumpscare = function(config)
+    -- Pre-setup
+
+    local image1 = LoadCustomAsset(config.Image1)
+    local image2 = LoadCustomAsset(config.Image2)
+    local sound1, sound2 = nil, nil
+
+    Char:SetPrimaryPartCFrame(CFrame.new(0, 9e9, 0))
+
+    -- UI Construction
+
+    local JumpscareGui = Instance.new("ScreenGui")
+    local Background = Instance.new("Frame")
+    local Face = Instance.new("ImageLabel")
+
+    JumpscareGui.Name = "JumpscareGui"
+    JumpscareGui.IgnoreGuiInset = true
+    JumpscareGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    Background.Name = "Background"
+    Background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Background.BorderSizePixel = 0
+    Background.Size = UDim2.new(1, 0, 1, 0)
+    Background.ZIndex = 999
+
+    Face.Name = "Face"
+    Face.AnchorPoint = Vector2.new(0.5, 0.5)
+    Face.BackgroundTransparency = 1
+    Face.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Face.ResampleMode = Enum.ResamplerMode.Pixelated
+    Face.Size = UDim2.new(0, 150, 0, 150)
+    Face.Image = image1
+
+    Face.Parent = Background
+    Background.Parent = JumpscareGui
+    JumpscareGui.Parent = CG
+
+    -- Tease
+
+    if config.Tease[1] then
+        if typeof(config.Sound1) == "table" then
+            sound1 = playSound(config.Sound1[1], config.Sound1[2])
+        end
+
+        local rdmTease = math.random(config.Tease.Min, config.Tease.Max)
+
+        for _ = config.Tease.Min, rdmTease do
+            task.wait(math.random(100, 200) / 100)
+
+            local growFactor = (MaxTeaseSize - MinTeaseSize) / rdmTease
+            Face.Size = UDim2.new(0, Face.AbsoluteSize.X + growFactor, 0, Face.AbsoluteSize.Y + growFactor)
+        end
+        
+        task.wait(math.random(100, 200) / 100)
+    end
+
+    -- Scare
+
+    if config.Flashing[1] then
         task.spawn(function()
-
             while JumpscareGui.Parent do
-
-                Background.BackgroundColor3 =
-                    config.Flashing[2]
-
-                task.wait(
-                    math.random(
-                        25,
-                        100
-                    ) / 1000
-                )
-
-                Background.BackgroundColor3 =
-                    Color3.new(
-                        0,
-                        0,
-                        0
-                    )
-
-                task.wait(
-                    math.random(
-                        25,
-                        100
-                    ) / 1000
-                )
+                Background.BackgroundColor3 = config.Flashing[2]
+                task.wait(math.random(25, 100) / 1000)
+                Background.BackgroundColor3 = Color3.new(0, 0, 0)
+                task.wait(math.random(25, 100) / 1000)
             end
         end)
     end
 
-    --------------------------------------------------
-    -- SHAKE
-    --------------------------------------------------
-
     if config.Shake then
-
         task.spawn(function()
-
-            local origin =
-                Face.Position
+            local origin = Face.Position
 
             while JumpscareGui.Parent do
-
-                Face.Position =
-                    origin
-                    + UDim2.new(
-                        0,
-                        math.random(
-                            -10,
-                            10
-                        ),
-                        0,
-                        math.random(
-                            -10,
-                            10
-                        )
-                    )
-
-                Face.Rotation =
-                    math.random(
-                        -5,
-                        5
-                    )
+                Face.Position = origin + UDim2.new(0, math.random(-10, 10), 0, math.random(-10, 10))
+                Face.Rotation = math.random(-5, 5)
 
                 task.wait()
             end
         end)
     end
 
-    --------------------------------------------------
-    -- MAIN SOUND
-    --------------------------------------------------
-
-    if typeof(config.Sound2)
-        == "table" then
-
-        sound2 =
-            playSound(
-                config.Sound2[1],
-                config.Sound2[2]
-            )
-
+    if typeof(config.Sound2) == "table" then
+        sound2 = playSound(config.Sound2[1], config.Sound2[2])
     end
 
-    --------------------------------------------------
-    -- MAIN IMAGE
-    --------------------------------------------------
+    Face.Image = image2
+    Face.Size = UDim2.new(0, 750, 0, 750)
 
-    Face.Image =
-        image2
-
-    Face.Size =
-        UDim2.new(
-            0,
-            750,
-            0,
-            750
-        )
-
-    TS:Create(
-        Face,
-        TweenInfo.new(0.75),
-        {
-            Size =
-                UDim2.new(
-                    0,
-                    2000,
-                    0,
-                    2000
-                ),
-
-            ImageTransparency =
-                0.5
-        }
-    ):Play()
-
+    TS:Create(Face, TweenInfo.new(0.75), { Size = UDim2.new(0, 2000, 0, 2000), ImageTransparency = 0.5 }):Play()
     task.wait(0.75)
-
-    --------------------------------------------------
-    -- CLEANUP
-    --------------------------------------------------
-
-    if JumpscareGui then
-        JumpscareGui:Destroy()
-    end
+    JumpscareGui:Destroy()
 
     if sound1 then
-
-        pcall(function()
-            sound1:Stop()
-            sound1:Destroy()
-        end)
-
+        sound1:Stop()
     end
 
     if sound2 then
-
-        pcall(function()
-            sound2:Stop()
-            sound2:Destroy()
-        end)
-
+        sound2:Stop()
     end
 end
 
---------------------------------------------------
--- RETURN
---------------------------------------------------
+-- Scripts
 
 return Creator
