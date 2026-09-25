@@ -178,7 +178,6 @@ local function playSound(soundId, properties)
                     "rbxassetid://"
                     .. digits
             end
-
         end
     end
 
@@ -266,13 +265,9 @@ end
 local function shouldDeflect()
 
     if workspace:FindFirstChild("Doggo") then
-
         return true
-
     elseif Char:FindFirstChild("Crucifix") then
-
         return true
-
     end
 
     return false
@@ -387,9 +382,7 @@ end
 Creator.runEntity = function(entity)
 
     if not entity or not entity.Model then
-
         warn("Invalid entity")
-
         return
     end
 
@@ -416,14 +409,20 @@ Creator.runEntity = function(entity)
 
         local loadedRooms = {}
 
+        local currentRooms =
+            workspace:FindFirstChild("CurrentRooms")
+
+        if not currentRooms then
+            return loadedRooms
+        end
+
         for _, room in next,
-            workspace.CurrentRooms:GetChildren() do
+            currentRooms:GetChildren() do
 
             local roomNumber =
                 tonumber(room.Name)
 
-            if roomNumber
-                and room:FindFirstChild("Nodes") then
+            if roomNumber then
 
                 loadedRooms[#loadedRooms + 1] = {
                     Room = room,
@@ -462,8 +461,15 @@ Creator.runEntity = function(entity)
             return {}
         end
 
-        local roomNodes =
-            nodeFolder:GetChildren()
+        local roomNodes = {}
+
+        for _, node in next,
+            nodeFolder:GetChildren() do
+
+            if node:IsA("BasePart") then
+                roomNodes[#roomNodes + 1] = node
+            end
+        end
 
         table.sort(
             roomNodes,
@@ -479,6 +485,14 @@ Creator.runEntity = function(entity)
                     return aNumber < bNumber
                 end
 
+                if aNumber then
+                    return true
+                end
+
+                if bNumber then
+                    return false
+                end
+
                 return a.Name < b.Name
             end
         )
@@ -487,7 +501,7 @@ Creator.runEntity = function(entity)
     end
 
     --------------------------------------------------
-    -- INITIAL ROOM LIST
+    -- INITIAL ROOMS
     --------------------------------------------------
 
     local rooms =
@@ -496,7 +510,7 @@ Creator.runEntity = function(entity)
     if #rooms == 0 then
 
         warn(
-            "No room nodes found"
+            "No rooms currently loaded"
         )
 
         return
@@ -514,10 +528,6 @@ Creator.runEntity = function(entity)
 
     local spawnRoomNumber
 
-    --------------------------------------------------
-    -- EXACT TARGET ROOM
-    --------------------------------------------------
-
     for _, data in next, rooms do
 
         if data.Number == targetRoom then
@@ -531,10 +541,6 @@ Creator.runEntity = function(entity)
 
     --------------------------------------------------
     -- FALLBACK
-    --
-    -- If the exact room isn't loaded,
-    -- use the oldest loaded room behind
-    -- the current room.
     --------------------------------------------------
 
     if not spawnRoomNumber then
@@ -565,19 +571,25 @@ Creator.runEntity = function(entity)
     --------------------------------------------------
     -- DYNAMIC NODE QUEUE
     --
-    -- Unlike the original version, this does NOT
-    -- permanently store all nodes at the beginning.
+    -- IMPORTANT:
     --
-    -- New Hotel rooms can be added while the entity
-    -- is moving.
+    -- The old version only scanned a room once.
+    -- If the room existed before its Nodes loaded,
+    -- that room was permanently skipped.
     --
-    -- Rooms that stream out are ignored.
+    -- This version repeatedly scans every loaded
+    -- room and adds any new nodes it finds.
     --------------------------------------------------
 
     local nodes = {}
 
-    local highestRoomAdded =
-        spawnRoomNumber - 1
+    local knownNodes = {}
+
+    local consumedNodes = {}
+
+    --------------------------------------------------
+    -- UPDATE NODE QUEUE
+    --------------------------------------------------
 
     local function updateNodeQueue()
 
@@ -587,8 +599,7 @@ Creator.runEntity = function(entity)
         for _, data in next,
             currentRooms do
 
-            if data.Number >= spawnRoomNumber
-                and data.Number > highestRoomAdded then
+            if data.Number >= spawnRoomNumber then
 
                 local roomNodes =
                     getRoomNodes(
@@ -600,34 +611,73 @@ Creator.runEntity = function(entity)
 
                     if node
                         and node.Parent
-                        and node:IsA("BasePart") then
+                        and node:IsDescendantOf(
+                            workspace.CurrentRooms
+                        )
+                        and not knownNodes[node] then
 
-                        nodes[#nodes + 1] =
-                            node
+                        knownNodes[node] = true
+
+                        nodes[#nodes + 1] = {
+                            Node = node,
+                            RoomNumber = data.Number,
+                            NodeNumber =
+                                tonumber(node.Name)
+                                or 999999,
+                        }
 
                     end
                 end
-
-                if data.Number > highestRoomAdded then
-
-                    highestRoomAdded =
-                        data.Number
-
-                end
             end
         end
+
+        --------------------------------------------------
+        -- ALWAYS SORT BY ROOM + NODE
+        --------------------------------------------------
+
+        table.sort(
+            nodes,
+            function(a, b)
+
+                if a.RoomNumber
+                    ~= b.RoomNumber then
+
+                    return a.RoomNumber
+                        < b.RoomNumber
+
+                end
+
+                return a.NodeNumber
+                    < b.NodeNumber
+            end
+        )
     end
 
     --------------------------------------------------
-    -- INITIAL NODE LOAD
+    -- INITIAL LOAD
     --------------------------------------------------
 
     updateNodeQueue()
 
+    --------------------------------------------------
+    -- WAIT FOR NODES IF THEY ARE STILL LOADING
+    --------------------------------------------------
+
+    local nodeWaitStart =
+        os.clock()
+
+    while #nodes == 0
+        and os.clock() - nodeWaitStart < 10 do
+
+        task.wait(0.1)
+
+        updateNodeQueue()
+    end
+
     if #nodes == 0 then
 
         warn(
-            "No nodes found in spawn rooms"
+            "No nodes found"
         )
 
         return
@@ -671,10 +721,7 @@ Creator.runEntity = function(entity)
     )
 
     --------------------------------------------------
-    -- UPDATE AGAIN AFTER DELAY
-    --
-    -- This is important because rooms can stream
-    -- while the entity is waiting.
+    -- UPDATE AFTER DELAY
     --------------------------------------------------
 
     updateNodeQueue()
@@ -1100,18 +1147,26 @@ Creator.runEntity = function(entity)
         + entity.Config.HeightOffset
 
     --------------------------------------------------
-    -- SPAWN ENTITY AT FIRST VALID NODE
+    -- FIND FIRST NODE
     --------------------------------------------------
+
+    updateNodeQueue()
 
     local firstNode
 
-    for i = 1, #nodes do
+    for _, data in next, nodes do
 
-        if nodes[i]
-            and nodes[i].Parent then
+        local node =
+            data.Node
+
+        if node
+            and node.Parent
+            and node:IsDescendantOf(
+                workspace.CurrentRooms
+            ) then
 
             firstNode =
-                nodes[i]
+                node
 
             break
         end
@@ -1123,6 +1178,10 @@ Creator.runEntity = function(entity)
 
         return
     end
+
+    --------------------------------------------------
+    -- SPAWN ENTITY
+    --------------------------------------------------
 
     entity.Model:SetPrimaryPartCFrame(
         firstNode.CFrame
@@ -1146,18 +1205,10 @@ Creator.runEntity = function(entity)
     for cycle = 1, totalCycles do
 
         --------------------------------------------------
-        -- FORWARD
-        --
-        -- This is now dynamic.
-        --
-        -- If Depth reaches the end of the currently
-        -- loaded nodes, it waits for Hotel to generate
-        -- the next room instead of stopping.
+        -- FORWARD MOVEMENT
         --------------------------------------------------
 
         if not entity.Config.BackwardsMovement then
-
-            local nodeIndex = 1
 
             while entity.Model.Parent
                 and not entity.Model:GetAttribute(
@@ -1165,38 +1216,44 @@ Creator.runEntity = function(entity)
                 ) do
 
                 --------------------------------------------------
-                -- LOOK FOR NEW ROOMS
+                -- FIND NEXT UNCONSUMED NODE
                 --------------------------------------------------
 
                 updateNodeQueue()
 
+                local nextNode
+                local nextData
+
+                for _, data in next, nodes do
+
+                    local node =
+                        data.Node
+
+                    if not consumedNodes[node]
+                        and node
+                        and node.Parent
+                        and node:IsDescendantOf(
+                            workspace.CurrentRooms
+                        ) then
+
+                        nextNode = node
+                        nextData = data
+
+                        break
+                    end
+                end
+
                 --------------------------------------------------
-                -- WAIT FOR MORE ROOMS IF NECESSARY
+                -- NO NODE YET
+                --
+                -- WAIT FOR HOTEL TO LOAD A NEW ROOM.
                 --------------------------------------------------
 
-                if nodeIndex > #nodes then
+                if not nextNode then
 
                     task.wait(0.1)
 
                     updateNodeQueue()
-
-                    continue
-                end
-
-                local node =
-                    nodes[nodeIndex]
-
-                --------------------------------------------------
-                -- NODE WAS STREAMED OUT
-                --------------------------------------------------
-
-                if not node
-                    or not node.Parent
-                    or not node:IsDescendantOf(
-                        workspace.CurrentRooms
-                    ) then
-
-                    nodeIndex += 1
 
                     continue
                 end
@@ -1208,8 +1265,8 @@ Creator.runEntity = function(entity)
                 if entity.Config.BreakLights then
 
                     local room =
-                        node.Parent
-                        and node.Parent.Parent
+                        nextNode.Parent
+                        and nextNode.Parent.Parent
 
                     if room
                         and room.Parent then
@@ -1230,7 +1287,7 @@ Creator.runEntity = function(entity)
 
                 drag(
                     entity.Model,
-                    node.Position
+                    nextNode.Position
                     + Vector3.new(
                         0,
                         nodeHeightOffset,
@@ -1239,21 +1296,32 @@ Creator.runEntity = function(entity)
                     entity.Config.Speed
                 )
 
-                nodeIndex += 1
+                --------------------------------------------------
+                -- MARK NODE AS USED
+                --------------------------------------------------
+
+                consumedNodes[nextNode] = true
 
                 --------------------------------------------------
-                -- CHECK FOR NEW ROOMS IMMEDIATELY
+                -- REFRESH ROOMS
                 --------------------------------------------------
 
                 updateNodeQueue()
+
+                --------------------------------------------------
+                -- SMALL WAIT
+                --
+                -- Gives CurrentRooms time to create the
+                -- next room while Depth is moving.
+                --------------------------------------------------
+
+                task.wait()
             end
 
         else
 
             --------------------------------------------------
             -- BACKWARDS MOVEMENT
-            --
-            -- Preserves the original backwards behavior.
             --------------------------------------------------
 
             updateNodeQueue()
@@ -1262,86 +1330,27 @@ Creator.runEntity = function(entity)
 
             for i = #nodes, 1, -1 do
 
-                if nodes[i]
-                    and nodes[i].Parent
-                    and nodes[i]:IsDescendantOf(
+                local data =
+                    nodes[i]
+
+                local node =
+                    data.Node
+
+                if node
+                    and node.Parent
+                    and node:IsDescendantOf(
                         workspace.CurrentRooms
                     ) then
 
                     backwardsNodes[
                         #backwardsNodes + 1
-                    ] = nodes[i]
+                    ] = node
 
                 end
             end
 
             for i = 1,
                 #backwardsNodes do
-
-                if not entity.Model:GetAttribute(
-                    "StopMovement"
-                ) then
-
-                    local node =
-                        backwardsNodes[i]
-
-                    if node
-                        and node.Parent then
-
-                        if entity.Config.BreakLights then
-
-                            local room =
-                                node.Parent
-                                and node.Parent.Parent
-
-                            if room
-                                and room.Parent then
-
-                                pcall(function()
-
-                                    ModuleScripts.ModuleEvents.breakLights(
-                                        room
-                                    )
-
-                                end)
-                            end
-                        end
-
-                        drag(
-                            entity.Model,
-                            node.Position
-                            + Vector3.new(
-                                0,
-                                nodeHeightOffset,
-                                0
-                            ),
-                            entity.Config.Speed
-                        )
-                    end
-                end
-            end
-        end
-
-        --------------------------------------------------
-        -- REBOUND
-        --------------------------------------------------
-
-        if cycles.Max > 1
-            and not entity.Model:GetAttribute(
-                "StopMovement"
-            ) then
-
-            --------------------------------------------------
-            -- UPDATE ROOMS BEFORE REBOUND
-            --------------------------------------------------
-
-            updateNodeQueue()
-
-            --------------------------------------------------
-            -- REVERSE THROUGH VALID NODES
-            --------------------------------------------------
-
-            for i = #nodes, 1, -1 do
 
                 if entity.Model:GetAttribute(
                     "StopMovement"
@@ -1351,407 +1360,26 @@ Creator.runEntity = function(entity)
                 end
 
                 local node =
-                    nodes[i]
-
-                --------------------------------------------------
-                -- SKIP DESPAWNED NODES
-                --------------------------------------------------
+                    backwardsNodes[i]
 
                 if node
-                    and node.Parent
-                    and node:IsDescendantOf(
-                        workspace.CurrentRooms
-                    ) then
+                    and node.Parent then
 
-                    drag(
-                        entity.Model,
-                        node.Position
-                        + Vector3.new(
-                            0,
-                            nodeHeightOffset,
-                            0
-                        ),
-                        entity.Config.Speed
-                    )
-                end
-            end
-        end
+                    if entity.Config.BreakLights then
 
-        --------------------------------------------------
-        -- REBOUND CALLBACK
-        --------------------------------------------------
+                        local room =
+                            node.Parent
+                            and node.Parent.Parent
 
-        entity.Debug.OnEntityFinishedRebound(
-            entity
-        )
+                        if room
+                            and room.Parent then
 
-        task.wait(
-            cycles.WaitTime or 0
-        )
+                            pcall(function()
 
-        --------------------------------------------------
-        -- CHECK FOR NEW ROOMS BEFORE NEXT CYCLE
-        --------------------------------------------------
+                                ModuleScripts.ModuleEvents.breakLights(
+                                    room
+                                )
 
-        updateNodeQueue()
-    end
-
-    --------------------------------------------------
-    -- DESPAWN
-    --------------------------------------------------
-
-    if entity.Model.Parent then
-        destroy(entity)
-    end
-end
-
---------------------------------------------------
--- JUMPSCARE
---------------------------------------------------
-
-Creator.runJumpscare = function(config)
-
-    if not config then
-        return
-    end
-
-    --------------------------------------------------
-    -- LOAD IMAGES
-    --------------------------------------------------
-
-    local image1 =
-        LoadCustomAsset(
-            config.Image1
-        )
-
-    local image2 =
-        LoadCustomAsset(
-            config.Image2
-        )
-
-    local sound1
-    local sound2
-
-    --------------------------------------------------
-    -- MOVE PLAYER AWAY
-    --------------------------------------------------
-
-    pcall(function()
-
-        Char:SetPrimaryPartCFrame(
-            CFrame.new(
-                0,
-                9e9,
-                0
-            )
-        )
-
-    end)
-
-    --------------------------------------------------
-    -- GUI
-    --------------------------------------------------
-
-    local JumpscareGui =
-        Instance.new("ScreenGui")
-
-    local Background =
-        Instance.new("Frame")
-
-    local Face =
-        Instance.new("ImageLabel")
-
-    JumpscareGui.Name =
-        "JumpscareGui"
-
-    JumpscareGui.IgnoreGuiInset =
-        true
-
-    JumpscareGui.ZIndexBehavior =
-        Enum.ZIndexBehavior.Sibling
-
-    Background.Name =
-        "Background"
-
-    Background.BackgroundColor3 =
-        Color3.fromRGB(
-            0,
-            0,
-            0
-        )
-
-    Background.BorderSizePixel =
-        0
-
-    Background.Size =
-        UDim2.new(
-            1,
-            0,
-            1,
-            0
-        )
-
-    Background.ZIndex =
-        999
-
-    Face.Name =
-        "Face"
-
-    Face.AnchorPoint =
-        Vector2.new(
-            0.5,
-            0.5
-        )
-
-    Face.BackgroundTransparency =
-        1
-
-    Face.Position =
-        UDim2.new(
-            0.5,
-            0,
-            0.5,
-            0
-        )
-
-    Face.ResampleMode =
-        Enum.ResamplerMode.Pixelated
-
-    Face.Size =
-        UDim2.new(
-            0,
-            150,
-            0,
-            150
-        )
-
-    Face.Image =
-        image1
-
-    Face.Parent =
-        Background
-
-    Background.Parent =
-        JumpscareGui
-
-    JumpscareGui.Parent =
-        CG
-
-    --------------------------------------------------
-    -- TEASE
-    --------------------------------------------------
-
-    if config.Tease
-        and config.Tease[1] then
-
-        if typeof(config.Sound1)
-            == "table" then
-
-            sound1 =
-                playSound(
-                    config.Sound1[1],
-                    config.Sound1[2]
-                )
-
-        end
-
-        local rdmTease =
-            math.random(
-                config.Tease.Min,
-                config.Tease.Max
-            )
-
-        for _ = config.Tease.Min,
-            rdmTease do
-
-            task.wait(
-                math.random(
-                    100,
-                    200
-                ) / 100
-            )
-
-            local growFactor =
-                (
-                    MaxTeaseSize
-                    - MinTeaseSize
-                )
-                / rdmTease
-
-            Face.Size =
-                UDim2.new(
-                    0,
-                    Face.AbsoluteSize.X
-                        + growFactor,
-                    0,
-                    Face.AbsoluteSize.Y
-                        + growFactor
-                )
-        end
-
-        task.wait(
-            math.random(
-                100,
-                200
-            ) / 100
-        )
-    end
-
-    --------------------------------------------------
-    -- FLASH
-    --------------------------------------------------
-
-    if config.Flashing
-        and config.Flashing[1] then
-
-        task.spawn(function()
-
-            while JumpscareGui.Parent do
-
-                Background.BackgroundColor3 =
-                    config.Flashing[2]
-
-                task.wait(
-                    math.random(
-                        25,
-                        100
-                    ) / 1000
-                )
-
-                Background.BackgroundColor3 =
-                    Color3.new(
-                        0,
-                        0,
-                        0
-                    )
-
-                task.wait(
-                    math.random(
-                        25,
-                        100
-                    ) / 1000
-                )
-            end
-        end)
-    end
-
-    --------------------------------------------------
-    -- SHAKE
-    --------------------------------------------------
-
-    if config.Shake then
-
-        task.spawn(function()
-
-            local origin =
-                Face.Position
-
-            while JumpscareGui.Parent do
-
-                Face.Position =
-                    origin
-                    + UDim2.new(
-                        0,
-                        math.random(
-                            -10,
-                            10
-                        ),
-                        0,
-                        math.random(
-                            -10,
-                            10
-                        )
-                    )
-
-                Face.Rotation =
-                    math.random(
-                        -5,
-                        5
-                    )
-
-                task.wait()
-            end
-        end)
-    end
-
-    --------------------------------------------------
-    -- MAIN SOUND
-    --------------------------------------------------
-
-    if typeof(config.Sound2)
-        == "table" then
-
-        sound2 =
-            playSound(
-                config.Sound2[1],
-                config.Sound2[2]
-            )
-
-    end
-
-    --------------------------------------------------
-    -- MAIN IMAGE
-    --------------------------------------------------
-
-    Face.Image =
-        image2
-
-    Face.Size =
-        UDim2.new(
-            0,
-            750,
-            0,
-            750
-        )
-
-    TS:Create(
-        Face,
-        TweenInfo.new(0.75),
-        {
-            Size =
-                UDim2.new(
-                    0,
-                    2000,
-                    0,
-                    2000
-                ),
-
-            ImageTransparency =
-                0.5
-        }
-    ):Play()
-
-    task.wait(0.75)
-
-    --------------------------------------------------
-    -- CLEANUP
-    --------------------------------------------------
-
-    if JumpscareGui then
-        JumpscareGui:Destroy()
-    end
-
-    if sound1 then
-
-        pcall(function()
-            sound1:Stop()
-            sound1:Destroy()
-        end)
-
-    end
-
-    if sound2 then
-
-        pcall(function()
-            sound2:Stop()
-            sound2:Destroy()
-        end)
-
-    end
-end
-
---------------------------------------------------
--- RETURN
---------------------------------------------------
-
-return Creator
+                            end)
+                        end
+                    end
